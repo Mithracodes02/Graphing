@@ -1,3 +1,4 @@
+import io
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -9,7 +10,7 @@ st.set_page_config(
 
 st.title("📊 Publication-Grade Graph Generator (Dual Y-Axis)")
 st.markdown(
-    "Upload your dataset (CSV or Excel) and customize a publication-ready figure with a linked secondary Y-axis (ideal for catalysis data like conversion/yield vs. productivity)."
+    "Upload your dataset, map your axes, customize limits, move the legend, and download high-resolution publication figures."
 )
 
 # --- SIDEBAR CONTROLS ---
@@ -25,7 +26,6 @@ if uploaded_file is not None:
       df = pd.read_csv(uploaded_file)
     else:
       df = pd.read_excel(uploaded_file)
-
     st.sidebar.success("File successfully loaded!")
   except Exception as e:
     st.sidebar.error(f"Error loading file: {e}")
@@ -43,22 +43,25 @@ if uploaded_file is not None:
     )
   else:
     st.sidebar.header("2. Axis Mapping")
+    default_x_idx = (
+        numeric_columns.index("Stoichiometric number")
+        if "Stoichiometric number" in numeric_columns
+        else 0
+    )
     x_col = st.sidebar.selectbox(
-        "Select X-Axis",
-        numeric_columns,
-        index=0 if "Stoichiometric number" not in numeric_columns else numeric_columns.index("Stoichiometric number")
+        "Select X-Axis", numeric_columns, index=default_x_idx
     )
 
     # Left Y-axis selections (Multiple variables allowed)
     left_y_cols = st.sidebar.multiselect(
-        "Select Left Y-Axis Variable(s) (e.g., Conversion / Yield)",
+        "Select Left Y-Axis Variable(s)",
         [col for col in numeric_columns if col != x_col],
         default=[numeric_columns[1]]
         if len(numeric_columns) > 1
         else [],
     )
 
-    # Right Y-axis selection (Single variable, e.g., Productivity)
+    # Right Y-axis selection (Single variable)
     remaining_cols = [
         col for col in numeric_columns if col != x_col and col not in left_y_cols
     ]
@@ -67,7 +70,43 @@ if uploaded_file is not None:
         [None] + remaining_cols,
     )
 
-    st.sidebar.header("3. Publication Styling")
+    st.sidebar.header("3. Axis Limits & Layout")
+    
+    # Auto or Custom X-Limits
+    auto_x = st.sidebar.checkbox("Auto X-Axis Limits", value=True)
+    if not auto_x:
+      x_min = st.sidebar.number_input("X Min", value=float(df[x_col].min()))
+      x_max = st.sidebar.number_input("X Max", value=float(df[x_col].max()))
+
+    # Auto or Custom Left Y-Limits
+    auto_y1 = st.sidebar.checkbox("Auto Left Y-Axis Limits", value=True)
+    if not auto_y1:
+      y1_min = st.sidebar.number_input("Left Y Min", value=0.0)
+      y1_max = st.sidebar.number_input("Left Y Max", value=50.0)
+
+    # Auto or Custom Right Y-Limits (if right Y exists)
+    if right_y_col:
+      auto_y2 = st.sidebar.checkbox("Auto Right Y-Axis Limits", value=True)
+      if not auto_y2:
+        y2_min = st.sidebar.number_input("Right Y Min", value=0.0)
+        y2_max = st.sidebar.number_input("Right Y Max", value=800.0)
+
+    # Legend Position Control
+    legend_loc = st.sidebar.selectbox(
+        "Legend Position",
+        [
+            "upper left",
+            "upper right",
+            "lower left",
+            "lower right",
+            "center left",
+            "center right",
+            "best",
+        ],
+        index=0,
+    )
+
+    st.sidebar.header("4. Publication Styling")
     fig_width = st.sidebar.slider("Figure Width (inches)", 4.0, 10.0, 6.0, 0.5)
     fig_height = st.sidebar.slider("Figure Height (inches)", 3.0, 8.0, 5.0, 0.5)
     font_size = st.sidebar.slider("Base Font Size", 8, 16, 12, 1)
@@ -80,9 +119,7 @@ if uploaded_file is not None:
     )
     right_label_custom = st.sidebar.text_input(
         "Right Y-Axis Label Customization",
-        value=right_y_col
-        if right_y_col
-        else "MeOH Productivity (g_MeOH kg_cat^-1 h^-1)",
+        value=right_y_col if right_y_col else "Productivity",
     )
 
     # --- PLOTTING ENGINE ---
@@ -101,9 +138,12 @@ if uploaded_file is not None:
     # Plot Left Y variables
     lines = []
     for col in left_y_cols:
-      # Check if it's thermo (dashed) or exp (solid) based on name
-      linestyle = "--" if any(k in col.lower() for k in ["thermo", "th", "calc"]) else "-"
-      marker = "o" if not linestyle == "--" else ""
+      linestyle = (
+          "--"
+          if any(k in col.lower() for k in ["thermo", "th", "calc"])
+          else "-"
+      )
+      marker = "o" if linestyle == "-" else ""
       (line,) = ax1.plot(
           df[x_col],
           df[col],
@@ -119,6 +159,14 @@ if uploaded_file is not None:
         left_label_custom, fontweight="bold", fontsize=font_size + 1
     )
     ax1.grid(True, linestyle=":", alpha=0.5)
+
+    # Apply X limits if custom
+    if not auto_x:
+      ax1.set_xlim(x_min, x_max)
+
+    # Apply Left Y limits if custom
+    if not auto_y1:
+      ax1.set_ylim(y1_min, y1_max)
 
     # Plot Right Y variable if selected
     if right_y_col:
@@ -139,13 +187,32 @@ if uploaded_file is not None:
           fontsize=font_size + 1,
       )
       ax2.tick_params(axis="y", labelcolor="brown")
+      
+      # Apply Right Y limits if custom
+      if not auto_y2:
+        ax2.set_ylim(y2_min, y2_max)
+
       lines.append(line2)
 
-      # Combine legends from both axes cleanly
+      # Combine legends from both axes and place according to user selection
       labs = [l.get_label() for l in lines]
-      ax1.legend(lines, labs, loc="upper left", frameon=True, facecolor="white", edgecolor="black", framealpha=0.9)
+      ax1.legend(
+          lines,
+          labs,
+          loc=legend_loc,
+          frameon=True,
+          facecolor="white",
+          edgecolor="black",
+          framealpha=0.9,
+      )
     else:
-      ax1.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="black", framealpha=0.9)
+      ax1.legend(
+          loc=legend_loc,
+          frameon=True,
+          facecolor="white",
+          edgecolor="black",
+          framealpha=0.9,
+      )
 
     plt.tight_layout()
 
@@ -154,11 +221,12 @@ if uploaded_file is not None:
     st.pyplot(fig)
 
     # --- EXPORT OPTIONS ---
-    st.sidebar.header("4. Export Figure")
-    dpi_choice = st.sidebar.selectbox("Export Resolution (DPI)", [300, 600, 1200], index=0)
+    st.sidebar.header("5. Export Figure")
+    dpi_choice = st.sidebar.selectbox(
+        "Export Resolution (DPI)", [300, 600, 1200], index=0
+    )
     file_format = st.sidebar.selectbox("File Format", ["png", "pdf", "svg"], index=0)
 
-    import io
     buf = io.BytesIO()
     fig.savefig(buf, format=file_format, dpi=dpi_choice, bbox_inches="tight")
     buf.seek(0)
@@ -175,13 +243,3 @@ else:
       "👈 Upload a CSV or Excel spreadsheet using the sidebar to start"
       " building your figure."
   )
-  
-  # Show an example of expected format
-  st.markdown("### Example Data Structure Expected:")
-  sample_data = pd.DataFrame({
-      "Stoichiometric number": [0.4, 0.9, 1.3],
-      "XCOx (Exp.)": [3.8, 10.0, 12.4],
-      "YMeOH (Thermo.)": [19.0, 35.0, 40.0],
-      "Productivity": [351.05, 552.6, 608.18]
-  })
-  st.dataframe(sample_data)
