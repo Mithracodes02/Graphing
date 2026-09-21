@@ -10,7 +10,7 @@ st.set_page_config(
 
 st.title("📊 Publication-Grade Graph Generator (Dual Y-Axis)")
 st.markdown(
-    "Upload your dataset, customize lines, 3D round markers, colors, fonts, axis limits, and export high-res figures."
+    "Upload your dataset, customize lines, 3D sphere markers, colors, fonts, axis limits, and export high-res figures."
 )
 
 # --- SIDEBAR CONTROLS ---
@@ -88,10 +88,10 @@ if uploaded_file is not None:
           f"Color for Right Y: {right_y_col}", "#8c564b"
       )
 
-    # Marker Styling (3D Round Effect)
+    # Marker Styling (3D Round Sphere Effect)
     st.sidebar.header("4. Marker & Font Styling")
-    use_3d_markers = st.sidebar.checkbox(
-        "Use 3D-Style Round Markers (Filled with white outline)", value=True
+    use_3d_spheres = st.sidebar.checkbox(
+        "Use 3D Round Sphere Markers (Glossy shaded effect)", value=True
     )
     
     font_family_choice = st.sidebar.selectbox(
@@ -171,12 +171,26 @@ if uploaded_file is not None:
           else "-"
       )
       
-      # Configure 3D-like round marker properties
-      marker = "o" if linestyle == "-" else ""
-      markerfacecolor = line_colors[col] if use_3d_markers else "none"
-      markeredgecolor = "black" if use_3d_markers else line_colors[col]
-      markeredgewidth = 1.0 if use_3d_markers else 1.5
-      markersize = 7 if use_3d_markers else 6
+      # Determine marker styling
+      has_markers = (linestyle == "-")
+      marker = "o" if has_markers else ""
+      
+      if use_3d_spheres and has_markers:
+        # Plot a subtle dark drop shadow layer first using scatter for 3D depth
+        ax1.scatter(
+            df[x_col], df[col],
+            s=90, color="black", alpha=0.15, zorder=3
+        )
+        # Main glossy sphere marker properties
+        markerfacecolor = line_colors[col]
+        markeredgecolor = "#111111"
+        markeredgewidth = 1.2
+        markersize = 8
+      else:
+        markerfacecolor = line_colors[col] if has_markers else "none"
+        markeredgecolor = line_colors[col] if has_markers else "none"
+        markeredgewidth = 1.5
+        markersize = 6
 
       (line,) = ax1.plot(
           df[x_col],
@@ -190,6 +204,7 @@ if uploaded_file is not None:
           markeredgecolor=markeredgecolor,
           markeredgewidth=markeredgewidth,
           linewidth=2,
+          zorder=4,
       )
       lines.append(line)
 
@@ -211,8 +226,18 @@ if uploaded_file is not None:
     if right_y_col:
       ax2 = ax1.twinx()
       
-      markerfacecolor_r = line_colors[right_y_col] if use_3d_markers else "none"
-      markeredgecolor_r = "black" if use_3d_markers else line_colors[right_y_col]
+      if use_3d_spheres:
+        ax2.scatter(
+            df[x_col], df[right_y_col],
+            s=90, color="black", alpha=0.15, zorder=3
+        )
+        markerfacecolor_r = line_colors[right_y_col]
+        markeredgecolor_r = "#111111"
+        markersize_r = 8
+      else:
+        markerfacecolor_r = line_colors[right_y_col]
+        markeredgecolor_r = line_colors[right_y_col]
+        markersize_r = 6
       
       (line2,) = ax2.plot(
           df[x_col],
@@ -220,12 +245,13 @@ if uploaded_file is not None:
           label=right_y_col,
           color=line_colors[right_y_col],
           linestyle="-",
-          marker="s" if use_3d_markers else "o",
-          markersize=7,
+          marker="o",
+          markersize=markersize_r,
           markerfacecolor=markerfacecolor_r,
           markeredgecolor=markeredgecolor_r,
-          markeredgewidth=1.0,
+          markeredgewidth=1.2,
           linewidth=2,
+          zorder=4,
       )
       ax2.set_ylabel(
           right_label_custom,
@@ -287,6 +313,6 @@ if uploaded_file is not None:
 
 else:
   st.info(
-      "👈 Upload a CSV or Excel data spreadsheet using the sidebar to start"
+      "👈 Upload a CSV or Excel spreadsheet using the sidebar to start"
       " building your figure."
   )
