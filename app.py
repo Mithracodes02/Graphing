@@ -10,7 +10,7 @@ st.set_page_config(
 
 st.title("📊 Publication-Grade Graph Generator (Dual Y-Axis)")
 st.markdown(
-    "Upload your dataset, map your axes, customize limits, move the legend, and download high-resolution publication figures."
+    "Upload your dataset, customize lines, 3D round markers, colors, fonts, axis limits, and export high-res figures."
 )
 
 # --- SIDEBAR CONTROLS ---
@@ -70,7 +70,35 @@ if uploaded_file is not None:
         [None] + remaining_cols,
     )
 
-    st.sidebar.header("3. Axis Limits & Layout")
+    st.sidebar.header("3. Line Colors & Styles")
+    
+    # Dynamic color pickers for each selected line
+    line_colors = {}
+    default_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+    
+    st.markdown("### Line Color Customization")
+    color_idx = 0
+    for col in left_y_cols:
+      default_c = default_colors[color_idx % len(default_colors)]
+      line_colors[col] = st.sidebar.color_picker(f"Color for: {col}", default_c)
+      color_idx += 1
+
+    if right_y_col:
+      line_colors[right_y_col] = st.sidebar.color_picker(
+          f"Color for Right Y: {right_y_col}", "#8c564b"
+      )
+
+    # Marker Styling (3D Round Effect)
+    st.sidebar.header("4. Marker & Font Styling")
+    use_3d_markers = st.sidebar.checkbox(
+        "Use 3D-Style Round Markers (Filled with white outline)", value=True
+    )
+    
+    font_family_choice = st.sidebar.selectbox(
+        "Font Family", ["sans-serif", "serif", "monospace", "DejaVu Sans"], index=0
+    )
+
+    st.sidebar.header("5. Axis Limits & Layout")
     
     # Auto or Custom X-Limits
     auto_x = st.sidebar.checkbox("Auto X-Axis Limits", value=True)
@@ -106,7 +134,6 @@ if uploaded_file is not None:
         index=0,
     )
 
-    st.sidebar.header("4. Publication Styling")
     fig_width = st.sidebar.slider("Figure Width (inches)", 4.0, 10.0, 6.0, 0.5)
     fig_height = st.sidebar.slider("Figure Height (inches)", 3.0, 8.0, 5.0, 0.5)
     font_size = st.sidebar.slider("Base Font Size", 8, 16, 12, 1)
@@ -125,7 +152,7 @@ if uploaded_file is not None:
     # --- PLOTTING ENGINE ---
     plt.rcParams.update({
         "font.size": font_size,
-        "font.family": "sans-serif",
+        "font.family": font_family_choice,
         "axes.linewidth": 1.2,
         "xtick.direction": "in",
         "ytick.direction": "in",
@@ -143,13 +170,25 @@ if uploaded_file is not None:
           if any(k in col.lower() for k in ["thermo", "th", "calc"])
           else "-"
       )
+      
+      # Configure 3D-like round marker properties
       marker = "o" if linestyle == "-" else ""
+      markerfacecolor = line_colors[col] if use_3d_markers else "none"
+      markeredgecolor = "black" if use_3d_markers else line_colors[col]
+      markeredgewidth = 1.0 if use_3d_markers else 1.5
+      markersize = 7 if use_3d_markers else 6
+
       (line,) = ax1.plot(
           df[x_col],
           df[col],
           label=col,
+          color=line_colors[col],
           linestyle=linestyle,
           marker=marker,
+          markersize=markersize,
+          markerfacecolor=markerfacecolor,
+          markeredgecolor=markeredgecolor,
+          markeredgewidth=markeredgewidth,
           linewidth=2,
       )
       lines.append(line)
@@ -171,22 +210,30 @@ if uploaded_file is not None:
     # Plot Right Y variable if selected
     if right_y_col:
       ax2 = ax1.twinx()
+      
+      markerfacecolor_r = line_colors[right_y_col] if use_3d_markers else "none"
+      markeredgecolor_r = "black" if use_3d_markers else line_colors[right_y_col]
+      
       (line2,) = ax2.plot(
           df[x_col],
           df[right_y_col],
           label=right_y_col,
-          color="brown",
+          color=line_colors[right_y_col],
           linestyle="-",
-          marker="s",
+          marker="s" if use_3d_markers else "o",
+          markersize=7,
+          markerfacecolor=markerfacecolor_r,
+          markeredgecolor=markeredgecolor_r,
+          markeredgewidth=1.0,
           linewidth=2,
       )
       ax2.set_ylabel(
           right_label_custom,
-          color="brown",
+          color=line_colors[right_y_col],
           fontweight="bold",
           fontsize=font_size + 1,
       )
-      ax2.tick_params(axis="y", labelcolor="brown")
+      ax2.tick_params(axis="y", labelcolor=line_colors[right_y_col])
       
       # Apply Right Y limits if custom
       if not auto_y2:
@@ -221,7 +268,7 @@ if uploaded_file is not None:
     st.pyplot(fig)
 
     # --- EXPORT OPTIONS ---
-    st.sidebar.header("5. Export Figure")
+    st.sidebar.header("6. Export Figure")
     dpi_choice = st.sidebar.selectbox(
         "Export Resolution (DPI)", [300, 600, 1200], index=0
     )
@@ -240,6 +287,6 @@ if uploaded_file is not None:
 
 else:
   st.info(
-      "👈 Upload a CSV or Excel spreadsheet using the sidebar to start"
+      "👈 Upload a CSV or Excel data spreadsheet using the sidebar to start"
       " building your figure."
   )
