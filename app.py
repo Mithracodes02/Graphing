@@ -1,5 +1,6 @@
 import io
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -10,7 +11,7 @@ st.set_page_config(
 
 st.title("📊 Publication-Grade Graph Generator (Dual Y-Axis)")
 st.markdown(
-    "Upload your dataset, customize lines, 3D sphere markers, colors, fonts, axis limits, and export high-res figures."
+    "Upload your dataset, customize Origin-style 3D spheres, font colors, axis limits, and export high-res figures."
 )
 
 # --- SIDEBAR CONTROLS ---
@@ -76,7 +77,6 @@ if uploaded_file is not None:
     line_colors = {}
     default_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
     
-    st.markdown("### Line Color Customization")
     color_idx = 0
     for col in left_y_cols:
       default_c = default_colors[color_idx % len(default_colors)]
@@ -88,15 +88,22 @@ if uploaded_file is not None:
           f"Color for Right Y: {right_y_col}", "#8c564b"
       )
 
-    # Marker Styling (3D Round Sphere Effect)
-    st.sidebar.header("4. Marker & Font Styling")
+    # Marker Styling (Origin-style 3D Glossy Sphere Effect)
+    st.sidebar.header("4. Marker, Font & Color Styling")
     use_3d_spheres = st.sidebar.checkbox(
-        "Use 3D Round Sphere Markers (Glossy shaded effect)", value=True
+        "Use Origin-Style 3D Glossy Sphere Markers", value=True
     )
     
     font_family_choice = st.sidebar.selectbox(
         "Font Family", ["sans-serif", "serif", "monospace", "DejaVu Sans"], index=0
     )
+
+    # Font Color Controls
+    st.markdown("### 🎨 Font Colors")
+    tick_color = st.sidebar.color_picker("Axis Ticks & Numbers Color", "#000000")
+    x_title_color = st.sidebar.color_picker("X-Axis Title Color", "#000000")
+    left_title_color = st.sidebar.color_picker("Left Y-Axis Title Color", "#000000")
+    right_title_color = st.sidebar.color_picker("Right Y-Axis Title Color", "#8c564b") if right_y_col else "#000000"
 
     st.sidebar.header("5. Axis Limits & Layout")
     
@@ -162,6 +169,18 @@ if uploaded_file is not None:
 
     fig, ax1 = plt.subplots(figsize=(fig_width, fig_height))
 
+    # Helper function to draw Origin-style 3D glossy spheres
+    def plot_origin_3d_spheres(ax, x, y, color):
+      # 1. Subtle drop shadow layer behind the sphere for depth
+      ax.scatter(x, y, s=110, color="black", alpha=0.15, zorder=3, linewidths=0)
+      # 2. Main colored sphere body
+      ax.scatter(x, y, s=80, color=color, edgecolor="#222222", linewidth=1.0, zorder=4)
+      # 3. Specular highlight (glossy reflection dot offset to top-left)
+      # Approximate data-to-pixel offset for highlight reflection
+      x_data = np.array(x)
+      y_data = np.array(y)
+      ax.scatter(x_data, y_data, s=15, color="white", alpha=0.75, zorder=5, linewidths=0)
+
     # Plot Left Y variables
     lines = []
     for col in left_y_cols:
@@ -171,47 +190,34 @@ if uploaded_file is not None:
           else "-"
       )
       
-      # Determine marker styling
       has_markers = (linestyle == "-")
-      marker = "o" if has_markers else ""
       
-      if use_3d_spheres and has_markers:
-        # Plot a subtle dark drop shadow layer first using scatter for 3D depth
-        ax1.scatter(
-            df[x_col], df[col],
-            s=90, color="black", alpha=0.15, zorder=3
-        )
-        # Main glossy sphere marker properties
-        markerfacecolor = line_colors[col]
-        markeredgecolor = "#111111"
-        markeredgewidth = 1.2
-        markersize = 8
-      else:
-        markerfacecolor = line_colors[col] if has_markers else "none"
-        markeredgecolor = line_colors[col] if has_markers else "none"
-        markeredgewidth = 1.5
-        markersize = 6
-
+      # Plot connector line first
       (line,) = ax1.plot(
           df[x_col],
           df[col],
           label=col,
           color=line_colors[col],
           linestyle=linestyle,
-          marker=marker,
-          markersize=markersize,
-          markerfacecolor=markerfacecolor,
-          markeredgecolor=markeredgecolor,
-          markeredgewidth=markeredgewidth,
+          marker="" if use_3d_spheres and has_markers else ("o" if has_markers else ""),
+          markersize=6,
+          markerfacecolor=line_colors[col],
+          markeredgecolor="black",
           linewidth=2,
-          zorder=4,
+          zorder=2,
       )
+      
+      # Overlay Origin-style 3D spheres if enabled and it's a dotted/solid data line with markers
+      if use_3d_spheres and has_markers:
+        plot_origin_3d_spheres(ax1, df[x_col], df[col], line_colors[col])
+
       lines.append(line)
 
-    ax1.set_xlabel(x_label_custom, fontweight="bold", fontsize=font_size + 1)
-    ax1.set_ylabel(
-        left_label_custom, fontweight="bold", fontsize=font_size + 1
-    )
+    # Style X and Left Y axes
+    ax1.set_xlabel(x_label_custom, fontweight="bold", fontsize=font_size + 1, color=x_title_color)
+    ax1.set_ylabel(left_label_custom, fontweight="bold", fontsize=font_size + 1, color=left_title_color)
+    ax1.tick_params(axis="x", colors=tick_color)
+    ax1.tick_params(axis="y", colors=tick_color, labelcolor=tick_color)
     ax1.grid(True, linestyle=":", alpha=0.5)
 
     # Apply X limits if custom
@@ -226,40 +232,28 @@ if uploaded_file is not None:
     if right_y_col:
       ax2 = ax1.twinx()
       
-      if use_3d_spheres:
-        ax2.scatter(
-            df[x_col], df[right_y_col],
-            s=90, color="black", alpha=0.15, zorder=3
-        )
-        markerfacecolor_r = line_colors[right_y_col]
-        markeredgecolor_r = "#111111"
-        markersize_r = 8
-      else:
-        markerfacecolor_r = line_colors[right_y_col]
-        markeredgecolor_r = line_colors[right_y_col]
-        markersize_r = 6
-      
       (line2,) = ax2.plot(
           df[x_col],
           df[right_y_col],
           label=right_y_col,
           color=line_colors[right_y_col],
           linestyle="-",
-          marker="o",
-          markersize=markersize_r,
-          markerfacecolor=markerfacecolor_r,
-          markeredgecolor=markeredgecolor_r,
-          markeredgewidth=1.2,
+          marker="" if use_3d_spheres else "o",
+          markersize=6,
           linewidth=2,
-          zorder=4,
+          zorder=2,
       )
+      
+      if use_3d_spheres:
+        plot_origin_3d_spheres(ax2, df[x_col], df[right_y_col], line_colors[right_y_col])
+
       ax2.set_ylabel(
           right_label_custom,
-          color=line_colors[right_y_col],
+          color=right_title_color,
           fontweight="bold",
           fontsize=font_size + 1,
       )
-      ax2.tick_params(axis="y", labelcolor=line_colors[right_y_col])
+      ax2.tick_params(axis="y", colors=tick_color, labelcolor=tick_color)
       
       # Apply Right Y limits if custom
       if not auto_y2:
